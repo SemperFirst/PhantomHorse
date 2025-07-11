@@ -8,7 +8,7 @@ import org.apache.commons.collections.comparators.TransformingComparator;
 import java.io.*;
 import java.util.PriorityQueue;
 
-public class CCdemo {
+public class CC1demo {
 
     public static void main(String[] args) throws Exception {
         // 真实利用链
